@@ -103,31 +103,40 @@ const categorizeContent = (text) => {
 };
 
 const App = () => {
+  const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY ?? '';
+  const GEMINI_MODEL = 'gemini-1.5-flash';
+
   // Load initial state from localStorage if available
   const [items, setItems] = useState(() => {
     const saved = localStorage.getItem('smart-curator-items');
-    return saved
-      ? JSON.parse(saved)
-      : [
-          {
-            id: 1,
-            title: 'Tailwind CSS Documentation',
-            url: 'https://tailwindcss.com',
-            note: 'Great utility-first CSS framework',
-            category: 'Design/CSS',
-            type: 'code',
-            date: new Date().toLocaleDateString(),
-          },
-          {
-            id: 2,
-            title: 'Awesome React Repo',
-            url: 'https://github.com/enaqx/awesome-react',
-            note: 'Collection of React resources',
-            category: 'Repositories',
-            type: 'github',
-            date: new Date().toLocaleDateString(),
-          },
-        ];
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        return Array.isArray(parsed) ? parsed : [];
+      } catch (err) {
+        return [];
+      }
+    }
+    return [
+      {
+        id: 1,
+        title: 'Tailwind CSS Documentation',
+        url: 'https://tailwindcss.com',
+        note: 'Great utility-first CSS framework',
+        category: 'Design/CSS',
+        type: 'code',
+        date: new Date().toLocaleDateString(),
+      },
+      {
+        id: 2,
+        title: 'Awesome React Repo',
+        url: 'https://github.com/enaqx/awesome-react',
+        note: 'Collection of React resources',
+        category: 'Repositories',
+        type: 'github',
+        date: new Date().toLocaleDateString(),
+      },
+    ];
   });
 
   const [inputValue, setInputValue] = useState('');
@@ -135,38 +144,98 @@ const App = () => {
   const [filter, setFilter] = useState('');
   const [darkMode, setDarkMode] = useState(true);
   const [showNotification, setShowNotification] = useState(false);
+  const [notificationCategory, setNotificationCategory] = useState('');
+  const [aiEnabled, setAiEnabled] = useState(false);
+  const [aiAddLoading, setAiAddLoading] = useState(false);
+  const [roadmapLoading, setRoadmapLoading] = useState(false);
+  const [roadmapOpen, setRoadmapOpen] = useState(false);
+  const [roadmapContent, setRoadmapContent] = useState('');
+  const [roadmapError, setRoadmapError] = useState('');
 
   // Save to localStorage whenever items change
   useEffect(() => {
     localStorage.setItem('smart-curator-items', JSON.stringify(items));
   }, [items]);
 
+  const callGeminiAPI = async ({ prompt, responseMimeType = 'application/json' }) => {
+    if (!GEMINI_API_KEY) {
+      throw new Error('Missing Gemini API key.');
+    }
+
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ role: 'user', parts: [{ text: prompt }] }],
+          generationConfig: { responseMimeType },
+        }),
+      }
+    );
+
+    if (!response.ok) {
+      throw new Error(`Gemini request failed: ${response.status}`);
+    }
+
+    const data = await response.json();
+    const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+    if (!text) {
+      throw new Error('Gemini returned an empty response.');
+    }
+    return text;
+  };
+
+  const parseJsonSafe = (value) => {
+    try {
+      return JSON.parse(value);
+    } catch (err) {
+      return null;
+    }
+  };
+
   // --- Handlers ---
-  const handleAddItem = (e) => {
+  const handleAddItem = async (e) => {
     e.preventDefault();
     if (!inputValue.trim()) return;
 
-    const { type, category } = categorizeContent(`${inputValue} ${inputNote}`);
+    if (aiEnabled) {
+      await handleAIAdd();
+    } else {
+      const { type, category } = categorizeContent(`${inputValue} ${inputNote}`);
 
-    const newItem = {
-      id: Date.now(),
-      title: inputValue.startsWith('http')
-        ? new URL(inputValue).hostname + new URL(inputValue).pathname
-        : inputValue,
-      url: inputValue.startsWith('http') ? inputValue : null,
-      note: inputNote,
-      category,
-      type,
-      date: new Date().toLocaleDateString(),
-    };
+      let displayTitle = inputValue;
+      let parsedUrl = null;
 
-    setItems([newItem, ...items]);
-    setInputValue('');
-    setInputNote('');
+      if (inputValue.startsWith('http')) {
+        try {
+          parsedUrl = new URL(inputValue);
+          displayTitle = `${parsedUrl.hostname}${parsedUrl.pathname}`;
+        } catch (err) {
+          parsedUrl = null;
+          displayTitle = inputValue;
+        }
+      }
 
-    // Show quick success feedback
-    setShowNotification(true);
-    setTimeout(() => setShowNotification(false), 2000);
+      const newItem = {
+        id: Date.now(),
+        title: displayTitle,
+        url: parsedUrl ? inputValue : null,
+        note: inputNote,
+        category,
+        type,
+        date: new Date().toLocaleDateString(),
+      };
+
+      setItems((prev) => [newItem, ...prev]);
+      setInputValue('');
+      setInputNote('');
+
+      // Show quick success feedback
+      setNotificationCategory(category);
+      setShowNotification(true);
+      setTimeout(() => setShowNotification(false), 2000);
+    }
   };
 
   const handleDelete = (id) => {
@@ -187,28 +256,156 @@ const App = () => {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
+  const handleAIAdd = async () => {
+    if (!GEMINI_API_KEY) {
+      alert('Add a Gemini API key to enable AI Smart Add.');
+      return;
+    }
+
+    setAiAddLoading(true);
+    try {
+      const prompt = [
+        'You are an assistant for a tech resource organizer.',
+        'Return JSON only with keys: title, category, type, note.',
+        'Types must be one of: github, article, code, tool.',
+        'Keep the note concise (max 140 chars).',
+        `Input: ${inputValue}`,
+        inputNote ? `Note: ${inputNote}` : 'Note: (none)',
+      ].join('\n');
+
+      const responseText = await callGeminiAPI({ prompt });
+      const responseJson = parseJsonSafe(responseText);
+
+      const fallback = categorizeContent(`${inputValue} ${inputNote}`);
+      const aiCategory = responseJson?.category ?? fallback.category;
+      const aiType = responseJson?.type ?? fallback.type;
+      const aiTitle = responseJson?.title ?? inputValue;
+      const aiNote = responseJson?.note ?? inputNote;
+
+      let parsedUrl = null;
+      if (inputValue.startsWith('http')) {
+        try {
+          parsedUrl = new URL(inputValue);
+        } catch (err) {
+          parsedUrl = null;
+        }
+      }
+
+      const newItem = {
+        id: Date.now(),
+        title: aiTitle,
+        url: parsedUrl ? inputValue : null,
+        note: aiNote,
+        category: aiCategory,
+        type: aiType,
+        date: new Date().toLocaleDateString(),
+      };
+
+      setItems((prev) => [newItem, ...prev]);
+      setInputValue('');
+      setInputNote('');
+      setNotificationCategory(aiCategory);
+      setShowNotification(true);
+      setTimeout(() => setShowNotification(false), 2000);
+    } catch (err) {
+      alert('AI Smart Add failed. Try again or use standard add.');
+    } finally {
+      setAiAddLoading(false);
+    }
   };
 
   // Import Data
   const importData = (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
     const fileReader = new FileReader();
-    fileReader.readAsText(event.target.files[0], 'UTF-8');
+    fileReader.readAsText(file, 'UTF-8');
     fileReader.onload = (e) => {
       try {
         const importedItems = JSON.parse(e.target.result);
-        setItems(importedItems);
+        const normalized = Array.isArray(importedItems)
+          ? importedItems.map((item) => ({
+              id: item.id ?? Date.now() + Math.random(),
+              title: item.title ?? 'Untitled',
+              url: item.url ?? null,
+              note: item.note ?? '',
+              category: item.category ?? 'General',
+              type: item.type ?? 'article',
+              date: item.date ?? new Date().toLocaleDateString(),
+            }))
+          : [];
+        setItems(normalized);
       } catch (err) {
         alert('Invalid JSON file');
       }
     };
   };
 
-  const filteredItems = items.filter(
-    (item) =>
-      item.title.toLowerCase().includes(filter.toLowerCase()) ||
-      item.note.toLowerCase().includes(filter.toLowerCase()) ||
-      item.category.toLowerCase().includes(filter.toLowerCase())
-  );
+  const handleGenerateRoadmap = async () => {
+    if (!GEMINI_API_KEY) {
+      alert('Add a Gemini API key to enable AI Insights.');
+      return;
+    }
+
+    setRoadmapLoading(true);
+    setRoadmapError('');
+    setRoadmapOpen(true);
+
+    try {
+      const itemsSnapshot = items
+        .map((item) => `${item.title} | ${item.category} | ${item.note ?? ''}`)
+        .slice(0, 80)
+        .join('\n');
+
+      const prompt = [
+        'You are a learning assistant.',
+        'Return JSON only with keys: profile, roadmap, insights, next_steps.',
+        'profile: short sentence.',
+        'roadmap: array of 4-6 steps.',
+        'insights: 2-4 bullet-style sentences.',
+        'next_steps: array of 3 items.',
+        'Keep output concise.',
+        `Library:\n${itemsSnapshot || 'No items yet.'}`,
+      ].join('\n');
+
+      const responseText = await callGeminiAPI({ prompt });
+      const responseJson = parseJsonSafe(responseText);
+
+      if (!responseJson) {
+        throw new Error('Roadmap parse failed.');
+      }
+
+      const roadmapLines = [
+        `Profile: ${responseJson.profile ?? 'Learning explorer'}`,
+        '',
+        'Roadmap:',
+        ...(responseJson.roadmap ?? []).map((step, index) => `${index + 1}. ${step}`),
+        '',
+        'Insights:',
+        ...(responseJson.insights ?? []).map((insight) => `- ${insight}`),
+        '',
+        'Next Steps:',
+        ...(responseJson.next_steps ?? []).map((step, index) => `${index + 1}. ${step}`),
+      ];
+
+      setRoadmapContent(roadmapLines.join('\n'));
+    } catch (err) {
+      setRoadmapError('Unable to generate a roadmap. Try again later.');
+    } finally {
+      setRoadmapLoading(false);
+    }
+  };
+
+  const filteredItems = items.filter((item) => {
+    const title = item.title?.toLowerCase() ?? '';
+    const note = item.note?.toLowerCase() ?? '';
+    const category = item.category?.toLowerCase() ?? '';
+    const query = filter.toLowerCase();
+    return title.includes(query) || note.includes(query) || category.includes(query);
+  });
 
   return (
     <div
@@ -220,7 +417,7 @@ const App = () => {
       {showNotification && (
         <div className="fixed bottom-4 right-4 bg-green-500 text-white px-4 py-2 rounded-lg shadow-lg flex items-center space-x-2 z-50 animate-bounce">
           <CheckCircle2 className="w-4 h-4" />
-          <span>Added to {items[0]?.category}</span>
+          <span>Added to {notificationCategory || 'General'}</span>
         </div>
       )}
 
@@ -242,6 +439,13 @@ const App = () => {
             </div>
 
             <div className="flex items-center space-x-2 sm:space-x-4">
+              <button
+                onClick={handleGenerateRoadmap}
+                className="px-3 py-1.5 rounded-full bg-gradient-to-r from-amber-400 to-orange-500 text-white text-xs font-semibold hover:from-amber-500 hover:to-orange-600 transition-colors"
+                title="AI Insights & Roadmap"
+              >
+                AI Insights
+              </button>
               <button
                 onClick={exportData}
                 className="p-2 rounded-full hover:bg-slate-700/20"
@@ -310,17 +514,33 @@ const App = () => {
                 />
                 <button
                   type="submit"
-                  className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors flex items-center justify-center space-x-2 whitespace-nowrap"
+                  className={`px-6 py-3 text-white font-medium rounded-lg transition-colors flex items-center justify-center space-x-2 whitespace-nowrap ${
+                    aiEnabled
+                      ? 'bg-gradient-to-r from-sky-500 to-indigo-600 hover:from-sky-600 hover:to-indigo-700'
+                      : 'bg-blue-600 hover:bg-blue-700'
+                  }`}
+                  disabled={aiAddLoading}
                 >
                   <Plus className="w-5 h-5" />
-                  <span>Add</span>
+                  <span>{aiAddLoading ? 'Analyzing...' : aiEnabled ? 'Smart Add' : 'Add'}</span>
                 </button>
               </div>
             </div>
           </form>
-          <div className="mt-3 text-[10px] sm:text-xs opacity-50 flex items-center gap-2">
-            <Search className="w-3 h-3" />
-            <span>Smart Sort enabled: Keywords like "React", "Python", "Linux" will auto-categorize.</span>
+          <div className="mt-3 flex items-center justify-between gap-4 text-[10px] sm:text-xs opacity-60">
+            <div className="flex items-center gap-2">
+              <Search className="w-3 h-3" />
+              <span>Smart Sort enabled: Keywords like "React", "Python", "Linux" will auto-categorize.</span>
+            </div>
+            <label className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={aiEnabled}
+                onChange={(e) => setAiEnabled(e.target.checked)}
+                className="h-4 w-4 rounded border-slate-500 text-blue-500"
+              />
+              <span className="uppercase tracking-wider">AI Auto-Tagging</span>
+            </label>
           </div>
         </div>
 
@@ -437,6 +657,33 @@ const App = () => {
           </div>
         )}
       </main>
+
+      {roadmapOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
+          <div
+            className={`w-full max-w-2xl rounded-2xl border p-6 shadow-xl ${
+              darkMode ? 'bg-slate-900 border-slate-700 text-slate-100' : 'bg-white border-gray-200'
+            }`}
+          >
+            <div className="flex items-center justify-between gap-4 mb-4">
+              <h2 className="text-lg font-semibold">AI Learning Roadmap</h2>
+              <button
+                onClick={() => setRoadmapOpen(false)}
+                className="px-3 py-1 text-xs rounded-full border border-slate-500/40 hover:border-slate-400"
+              >
+                Close
+              </button>
+            </div>
+            {roadmapLoading ? (
+              <p className="text-sm opacity-70">Analyzing your library...</p>
+            ) : roadmapError ? (
+              <p className="text-sm text-red-400">{roadmapError}</p>
+            ) : (
+              <pre className="whitespace-pre-wrap text-sm leading-relaxed">{roadmapContent}</pre>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 };
