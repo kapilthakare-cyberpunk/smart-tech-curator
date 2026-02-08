@@ -22,15 +22,15 @@ import {
 const getIconForType = (type) => {
   switch (type) {
     case 'github':
-      return <Github className="w-4 h-4" />;
+      return <Github className="w-4 h-4" aria-hidden="true" />;
     case 'article':
-      return <BookOpen className="w-4 h-4" />;
+      return <BookOpen className="w-4 h-4" aria-hidden="true" />;
     case 'code':
-      return <Code className="w-4 h-4" />;
+      return <Code className="w-4 h-4" aria-hidden="true" />;
     case 'tool':
-      return <Terminal className="w-4 h-4" />;
+      return <Terminal className="w-4 h-4" aria-hidden="true" />;
     default:
-      return <Layout className="w-4 h-4" />;
+      return <Layout className="w-4 h-4" aria-hidden="true" />;
   }
 };
 
@@ -102,6 +102,9 @@ const categorizeContent = (text) => {
   return { type: 'article', category: 'General' }; // Default
 };
 
+const dateFormatter = new Intl.DateTimeFormat(undefined);
+const formatDate = (date) => dateFormatter.format(date);
+
 const App = () => {
   const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY ?? '';
   const GEMINI_MODEL = 'gemini-1.5-flash';
@@ -125,7 +128,7 @@ const App = () => {
         note: 'Great utility-first CSS framework',
         category: 'Design/CSS',
         type: 'code',
-        date: new Date().toLocaleDateString(),
+        date: formatDate(new Date()),
       },
       {
         id: 2,
@@ -134,7 +137,7 @@ const App = () => {
         note: 'Collection of React resources',
         category: 'Repositories',
         type: 'github',
-        date: new Date().toLocaleDateString(),
+        date: formatDate(new Date()),
       },
     ];
   });
@@ -224,7 +227,7 @@ const App = () => {
         note: inputNote,
         category,
         type,
-        date: new Date().toLocaleDateString(),
+      date: formatDate(new Date()),
       };
 
       setItems((prev) => [newItem, ...prev]);
@@ -239,6 +242,7 @@ const App = () => {
   };
 
   const handleDelete = (id) => {
+    if (!window.confirm('Remove this item?')) return;
     setItems(items.filter((item) => item.id !== id));
   };
 
@@ -301,7 +305,7 @@ const App = () => {
         note: aiNote,
         category: aiCategory,
         type: aiType,
-        date: new Date().toLocaleDateString(),
+      date: formatDate(new Date()),
       };
 
       setItems((prev) => [newItem, ...prev]);
@@ -334,7 +338,7 @@ const App = () => {
               note: item.note ?? '',
               category: item.category ?? 'General',
               type: item.type ?? 'article',
-              date: item.date ?? new Date().toLocaleDateString(),
+              date: item.date ?? formatDate(new Date()),
             }))
           : [];
         setItems(normalized);
@@ -413,10 +417,21 @@ const App = () => {
         darkMode ? 'bg-slate-900 text-slate-100' : 'bg-gray-50 text-gray-900'
       } font-sans`}
     >
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-transparent"
+      >
+        Skip to main content
+      </a>
       {/* Notification Toast */}
       {showNotification && (
-        <div className="fixed bottom-4 right-4 bg-green-500 text-white px-4 py-2 rounded-lg shadow-lg flex items-center space-x-2 z-50 animate-bounce">
-          <CheckCircle2 className="w-4 h-4" />
+        <div
+          className="fixed bottom-4 right-4 bg-green-500 text-white px-4 py-2 rounded-lg shadow-lg flex items-center space-x-2 z-50 motion-safe:animate-bounce"
+          role="status"
+          aria-live="polite"
+          aria-atomic="true"
+        >
+          <CheckCircle2 className="w-4 h-4" aria-hidden="true" />
           <span>Added to {notificationCategory || 'General'}</span>
         </div>
       )}
@@ -433,7 +448,7 @@ const App = () => {
           <div className="flex justify-between items-center h-16">
             <div className="flex items-center space-x-3">
               <div className={`p-2 rounded-lg ${darkMode ? 'bg-blue-600' : 'bg-blue-500'}`}>
-                <Database className="w-5 h-5 text-white" />
+                <Database className="w-5 h-5 text-white" aria-hidden="true" />
               </div>
               <h1 className="text-xl font-bold tracking-tight">Tech Curator</h1>
             </div>
@@ -441,34 +456,51 @@ const App = () => {
             <div className="flex items-center space-x-2 sm:space-x-4">
               <button
                 onClick={handleGenerateRoadmap}
-                className="px-3 py-1.5 rounded-full bg-gradient-to-r from-amber-400 to-orange-500 text-white text-xs font-semibold hover:from-amber-500 hover:to-orange-600 transition-colors"
+                className="px-3 py-1.5 rounded-full bg-gradient-to-r from-amber-400 to-orange-500 text-white text-xs font-semibold hover:from-amber-500 hover:to-orange-600 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-transparent"
                 title="AI Insights & Roadmap"
               >
                 AI Insights
               </button>
               <button
                 onClick={exportData}
-                className="p-2 rounded-full hover:bg-slate-700/20"
+                className="p-2 rounded-full hover:bg-slate-700/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-transparent"
                 title="Export JSON"
+                aria-label="Export JSON"
               >
-                <Save className="w-5 h-5 opacity-70" />
+                <Save className="w-5 h-5 opacity-70" aria-hidden="true" />
               </button>
               <label
-                className="p-2 rounded-full hover:bg-slate-700/20 cursor-pointer"
+                className="p-2 rounded-full hover:bg-slate-700/20 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-transparent"
                 title="Import JSON"
+                aria-label="Import JSON"
+                role="button"
+                tabIndex={0}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    event.currentTarget.click();
+                  }
+                }}
               >
-                <Upload className="w-5 h-5 opacity-70" />
-                <input type="file" className="hidden" onChange={importData} accept=".json" />
+                <Upload className="w-5 h-5 opacity-70" aria-hidden="true" />
+                <input
+                  type="file"
+                  className="hidden"
+                  onChange={importData}
+                  accept=".json"
+                  aria-label="Import JSON file"
+                />
               </label>
               <div className="h-6 w-px bg-gray-500/20 mx-2"></div>
               <button
                 onClick={() => setDarkMode(!darkMode)}
-                className="p-2 rounded-full hover:bg-slate-700/20"
+                className="p-2 rounded-full hover:bg-slate-700/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-transparent"
+                aria-label="Toggle dark mode"
               >
                 {darkMode ? (
-                  <Sun className="w-5 h-5 opacity-70" />
+                  <Sun className="w-5 h-5 opacity-70" aria-hidden="true" />
                 ) : (
-                  <Moon className="w-5 h-5 opacity-70" />
+                  <Moon className="w-5 h-5 opacity-70" aria-hidden="true" />
                 )}
               </button>
             </div>
@@ -477,7 +509,7 @@ const App = () => {
       </nav>
 
       {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <main id="main-content" className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Input Section */}
         <div
           className={`mb-10 p-6 rounded-2xl shadow-sm border ${
@@ -493,9 +525,12 @@ const App = () => {
                 <input
                   type="text"
                   placeholder="Paste URL or Title..."
+                  name="resource"
+                  autoComplete="off"
+                  aria-label="Resource URL or title"
                   value={inputValue}
                   onChange={(e) => setInputValue(e.target.value)}
-                  className={`flex-1 p-3 rounded-lg border focus:ring-2 focus:ring-blue-500 outline-none transition-all ${
+                  className={`flex-1 p-3 rounded-lg border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${
                     darkMode
                       ? 'bg-slate-900 border-slate-700 placeholder-slate-500'
                       : 'bg-gray-50 border-gray-300'
@@ -504,9 +539,12 @@ const App = () => {
                 <input
                   type="text"
                   placeholder="Note (optional)"
+                  name="note"
+                  autoComplete="off"
+                  aria-label="Resource note"
                   value={inputNote}
                   onChange={(e) => setInputNote(e.target.value)}
-                  className={`flex-1 p-3 rounded-lg border focus:ring-2 focus:ring-blue-500 outline-none transition-all ${
+                  className={`flex-1 p-3 rounded-lg border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${
                     darkMode
                       ? 'bg-slate-900 border-slate-700 placeholder-slate-500'
                       : 'bg-gray-50 border-gray-300'
@@ -518,10 +556,10 @@ const App = () => {
                     aiEnabled
                       ? 'bg-gradient-to-r from-sky-500 to-indigo-600 hover:from-sky-600 hover:to-indigo-700'
                       : 'bg-blue-600 hover:bg-blue-700'
-                  }`}
+                  } focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-transparent`}
                   disabled={aiAddLoading}
                 >
-                  <Plus className="w-5 h-5" />
+                  <Plus className="w-5 h-5" aria-hidden="true" />
                   <span>{aiAddLoading ? 'Analyzing...' : aiEnabled ? 'Smart Add' : 'Add'}</span>
                 </button>
               </div>
@@ -529,7 +567,7 @@ const App = () => {
           </form>
           <div className="mt-3 flex items-center justify-between gap-4 text-[10px] sm:text-xs opacity-60">
             <div className="flex items-center gap-2">
-              <Search className="w-3 h-3" />
+              <Search className="w-3 h-3" aria-hidden="true" />
               <span>Smart Sort enabled: Keywords like "React", "Python", "Linux" will auto-categorize.</span>
             </div>
             <label className="flex items-center gap-2">
@@ -551,13 +589,16 @@ const App = () => {
               darkMode ? 'bg-slate-800' : 'bg-white'
             } border ${darkMode ? 'border-slate-700' : 'border-gray-200'}`}
           >
-            <Search className="absolute left-3 top-3 w-5 h-5 opacity-40" />
+            <Search className="absolute left-3 top-3 w-5 h-5 opacity-40" aria-hidden="true" />
             <input
               type="text"
               placeholder="Filter by keyword..."
+              name="filter"
+              autoComplete="off"
+              aria-label="Filter resources"
               value={filter}
               onChange={(e) => setFilter(e.target.value)}
-              className={`w-full pl-10 p-3 bg-transparent outline-none ${
+              className={`w-full pl-10 p-3 bg-transparent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${
                 darkMode ? 'placeholder-slate-500' : 'placeholder-gray-400'
               }`}
             />
@@ -588,7 +629,7 @@ const App = () => {
                 {catItems.map((item) => (
                   <div
                     key={item.id}
-                    className={`group relative p-4 rounded-xl border transition-all hover:shadow-lg hover:-translate-y-1 ${
+                    className={`group relative p-4 rounded-xl border transition-transform transition-shadow transition-colors hover:shadow-lg hover:-translate-y-1 ${
                       darkMode
                         ? 'bg-slate-800 border-slate-700 hover:border-blue-500/50'
                         : 'bg-white border-gray-200 hover:border-blue-400'
@@ -608,16 +649,18 @@ const App = () => {
                             href={item.url}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="p-1 hover:text-blue-500 transition-colors"
+                            className="p-1 hover:text-blue-500 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-transparent"
+                            aria-label="Open resource"
                           >
-                            <ExternalLink className="w-4 h-4" />
+                            <ExternalLink className="w-4 h-4" aria-hidden="true" />
                           </a>
                         )}
                         <button
                           onClick={() => handleDelete(item.id)}
-                          className="p-1 hover:text-red-500 transition-colors"
+                          className="p-1 hover:text-red-500 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-transparent"
+                          aria-label="Delete resource"
                         >
-                          <Trash2 className="w-4 h-4" />
+                          <Trash2 className="w-4 h-4" aria-hidden="true" />
                         </button>
                       </div>
                     </div>
@@ -638,7 +681,7 @@ const App = () => {
 
                     <div className="flex justify-between items-center mt-auto pt-3 border-t border-gray-200/5">
                       <div className="flex items-center space-x-2">
-                        <Tag className="w-3 h-3 opacity-30" />
+                        <Tag className="w-3 h-3 opacity-30" aria-hidden="true" />
                         <span className="text-[10px] opacity-50 uppercase">{item.type}</span>
                       </div>
                       <span className="text-[10px] opacity-30 font-mono">{item.date}</span>
@@ -652,14 +695,14 @@ const App = () => {
 
         {filteredItems.length === 0 && (
           <div className="text-center py-20 opacity-40">
-            <Layout className="w-16 h-16 mx-auto mb-4 opacity-50" />
+            <Layout className="w-16 h-16 mx-auto mb-4 opacity-50" aria-hidden="true" />
             <p>No items found.</p>
           </div>
         )}
       </main>
 
       {roadmapOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4 overscroll-contain">
           <div
             className={`w-full max-w-2xl rounded-2xl border p-6 shadow-xl ${
               darkMode ? 'bg-slate-900 border-slate-700 text-slate-100' : 'bg-white border-gray-200'
